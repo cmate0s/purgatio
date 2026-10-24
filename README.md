@@ -4,7 +4,7 @@
 
 Purgatio responde a dos preguntas que en Linux obligan a media docena de comandos:
 «¿qué tengo instalado?» y «¿cómo se quita esto?». Reúne en una sola ventana lo que
-instalaste con APT, Snap, Flatpak, pipx, npm, Cargo, Go, Homebrew, además de AppImages y binarios
+instalaste con APT, Snap, Flatpak, pipx, npm, Cargo, Go, Homebrew, pip --user, conda, además de AppImages y binarios
 sueltos que ningún gestor conoce. No hay lista que mantener a mano: se lee el estado
 real del sistema en cada arranque.
 
@@ -74,6 +74,8 @@ purgatio/
 │       ├── npm_backend.py      # npm + cargo
 │       ├── go_backend.py       # go install
 │       ├── brew_backend.py     # Homebrew
+│       ├── pip_backend.py      # pip --user
+│       ├── conda_backend.py    # entornos conda
 │       └── manual_backend.py   # AppImages, ~/.local/bin, restos .old
 └── ui/                  # GTK4 + Libadwaita
 ```

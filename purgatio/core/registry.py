@@ -10,10 +10,12 @@ from dataclasses import dataclass, field
 from .backends.apt_backend import AptBackend
 from .backends.base import Backend
 from .backends.brew_backend import BrewBackend
+from .backends.conda_backend import CondaBackend
 from .backends.flatpak_backend import FlatpakBackend
 from .backends.go_backend import GoBackend
 from .backends.npm_backend import CargoBackend, NpmBackend
 from .backends.manual_backend import ManualBackend
+from .backends.pip_backend import PipBackend
 from .backends.pipx_backend import PipxBackend
 from .backends.snap_backend import SnapBackend
 from .models import Orphan, Package, SOURCE_ORDER
@@ -23,10 +25,12 @@ BACKENDS: tuple[Backend, ...] = (
     SnapBackend(),
     FlatpakBackend(),
     PipxBackend(),
+    PipBackend(),
     NpmBackend(),
     CargoBackend(),
     GoBackend(),
     BrewBackend(),
+    CondaBackend(),
     ManualBackend(),
 )
 

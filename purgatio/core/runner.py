@@ -32,6 +32,8 @@ def _user_path_dirs() -> list[str]:
         Path("/snap/bin"),
         Path("/home/linuxbrew/.linuxbrew/bin"),
         home / ".linuxbrew" / "bin",
+        # conda no suele estar en el PATH: solo su carpeta «condabin», que no añade python ni pip
+        *(home / name / "condabin" for name in ("miniconda3", "anaconda3", "miniforge3", "mambaforge", "micromamba")),
     ]
     nvm = sorted(glob.glob(str(home / ".nvm" / "versions" / "node" / "*" / "bin")))
     candidates.extend(Path(p) for p in nvm[-1:])

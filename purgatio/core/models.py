@@ -56,39 +56,53 @@ SOURCES: tuple[Source, ...] = (
         3,
     ),
     Source(
+        "pip",
+        "Python (pip --user)",
+        "utilities-terminal-symbolic",
+        "Paquetes Python instalados con «pip install --user».",
+        4,
+    ),
+    Source(
         "npm",
         "npm global",
         "utilities-terminal-symbolic",
         "Paquetes de Node.js instalados globalmente con npm.",
-        4,
+        5,
     ),
     Source(
         "cargo",
         "Cargo",
         "utilities-terminal-symbolic",
         "Binarios de Rust instalados con «cargo install».",
-        5,
+        6,
     ),
     Source(
         "go",
         "Go",
         "utilities-terminal-symbolic",
         "Binarios de Go instalados con «go install».",
-        6,
+        7,
     ),
     Source(
         "brew",
         "Homebrew",
         "utilities-terminal-symbolic",
         "Fórmulas instaladas con Homebrew (Linuxbrew).",
-        7,
+        8,
+    ),
+    Source(
+        "conda",
+        "Conda",
+        "utilities-terminal-symbolic",
+        "Entornos de conda/mamba.",
+        9,
     ),
     Source(
         "manual",
         "AppImages y binarios",
         "folder-download-symbolic",
-        "AppImages, binarios sueltos y lanzadores que ningún gestor conoce.",
-        8,
+        "AppImages, binarios sueltos, carpetas en /opt y lanzadores que ningún gestor conoce.",
+        10,
     ),
 )
 
@@ -104,6 +118,9 @@ KIND_LABEL: dict[str, str] = {
     "appimage": "AppImage",
     "binary": "Binario suelto",
     "global": "Paquete global",
+    "env": "Entorno",
+    "directory": "Carpeta instalada a mano",
+    "python": "Paquete Python",
 }
 
 
