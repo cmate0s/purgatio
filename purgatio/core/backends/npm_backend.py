@@ -11,6 +11,10 @@ from ..runner import run_capture, which
 from .base import Backend
 
 
+# Herramientas que Node trae consigo: quitarlas rompe el propio npm.
+NPM_PROTECTED = {"npm", "corepack"}
+
+
 class NpmBackend(Backend):
     source = SOURCE_MAP["npm"]
 
@@ -47,8 +51,9 @@ class NpmBackend(Backend):
                     name=name,
                     version=str(info.get("version") or ""),
                     summary="Paquete global de Node.js (npm)",
-                    manual=True,
-                    kind="global",
+                    manual=name not in NPM_PROTECTED,
+                    protected=name in NPM_PROTECTED,
+                    kind="base" if name in NPM_PROTECTED else "global",
                     detail=f"prefijo global: {self._global_prefix()}",
                 )
             )
@@ -56,13 +61,40 @@ class NpmBackend(Backend):
         return packages
 
     def removal_argv(self, pkg: Package, purge: bool = False) -> list[str] | None:
+        if pkg.protected:
+            return None
         return ["npm", "uninstall", "-g", pkg.id]
 
     def needs_root(self, pkg: Package) -> bool:
         return not self._global_prefix().startswith(str(Path.home()))
 
 
-CARGO_LINE = re.compile(r"^(?P<name>\S+)\s+v(?P<version>\S+):$")
+# «ripgrep v14.1.0:»  o  «foo v0.1.0 (https://github.com/x/y#abc):»  o  «bar v0.2.0 (/ruta):»
+CARGO_LINE = re.compile(r"^(?P<name>\S+)\s+v(?P<version>\S+?)(?:\s+\((?P<origin>[^)]*)\))?:$")
+
+
+def parse_cargo_list(text: str) -> list[dict[str, object]]:
+    """Interpreta ``cargo install --list``: crates y los binarios de cada uno."""
+    crates: list[dict[str, object]] = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if line[0] not in " \t":
+            match = CARGO_LINE.match(line.strip())
+            if match:
+                crates.append(
+                    {
+                        "name": match.group("name"),
+                        "version": match.group("version"),
+                        "origin": match.group("origin") or "",
+                        "bins": [],
+                    }
+                )
+            else:
+                crates.append(None)  # type: ignore[arg-type]  # línea de crate no reconocida
+        elif crates and crates[-1] is not None:
+            crates[-1]["bins"].append(line.strip())  # type: ignore[union-attr]
+    return [c for c in crates if c]
 
 
 class CargoBackend(Backend):
@@ -76,22 +108,23 @@ class CargoBackend(Backend):
         if proc.returncode != 0:
             raise RuntimeError(proc.stderr.strip() or "cargo install --list falló")
         packages: list[Package] = []
-        for line in proc.stdout.splitlines():
-            match = CARGO_LINE.match(line.strip())
-            if not match:
-                continue
-            name = match.group("name")
+        bin_dir = Path.home() / ".cargo" / "bin"
+        for crate in parse_cargo_list(proc.stdout):
+            name = str(crate["name"])
+            bins = list(crate["bins"])  # type: ignore[call-overload]
+            first_bin = bin_dir / (bins[0] if bins else name)
+            origin = str(crate["origin"])
             packages.append(
                 Package(
                     source="cargo",
                     id=name,
                     name=name,
-                    version=match.group("version"),
-                    summary="Binario de Rust instalado con cargo install",
+                    version=str(crate["version"]),
+                    summary="Binario de Rust instalado con cargo install" + (f" · desde {origin}" if origin else ""),
                     manual=True,
                     kind="binary",
-                    detail=str(Path.home() / ".cargo" / "bin" / name),
-                    path=str(Path.home() / ".cargo" / "bin" / name),
+                    detail=", ".join(bins) if bins else str(first_bin),
+                    path=str(first_bin),
                 )
             )
         packages.sort(key=lambda p: p.name.casefold())

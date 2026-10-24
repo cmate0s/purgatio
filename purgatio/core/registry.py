@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 
 from .backends.apt_backend import AptBackend
 from .backends.base import Backend
+from .backends.brew_backend import BrewBackend
 from .backends.flatpak_backend import FlatpakBackend
+from .backends.go_backend import GoBackend
 from .backends.npm_backend import CargoBackend, NpmBackend
 from .backends.manual_backend import ManualBackend
 from .backends.pipx_backend import PipxBackend
@@ -23,6 +25,8 @@ BACKENDS: tuple[Backend, ...] = (
     PipxBackend(),
     NpmBackend(),
     CargoBackend(),
+    GoBackend(),
+    BrewBackend(),
     ManualBackend(),
 )
 
@@ -45,7 +49,7 @@ class ScanResult:
 ProgressCallback = Callable[[str, list[Package] | None, str | None], None]
 
 
-def _safe_list(backend: Backend) -> tuple[list[Package], str | None]:
+def safe_list(backend: Backend) -> tuple[list[Package], str | None]:
     try:
         if not backend.available():
             return [], "no disponible en este sistema"
@@ -57,7 +61,7 @@ def _safe_list(backend: Backend) -> tuple[list[Package], str | None]:
 def scan_sync(include_orphans: bool = True) -> ScanResult:
     result = ScanResult()
     for backend in BACKENDS:
-        packages, error = _safe_list(backend)
+        packages, error = safe_list(backend)
         result.packages.extend(packages)
         if error:
             result.errors.append((backend.source.id, error))
@@ -82,7 +86,7 @@ def scan_async(
     def worker() -> None:
         result = ScanResult()
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_safe_list, backend): backend for backend in BACKENDS}
+            futures = {pool.submit(safe_list, backend): backend for backend in BACKENDS}
             for future in as_completed(futures):
                 backend = futures[future]
                 packages, error = future.result()

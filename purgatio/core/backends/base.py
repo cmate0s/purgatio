@@ -24,6 +24,10 @@ class Backend:
         """Orden a ejecutar para desinstalar ``pkg`` (sin prefijo de root)."""
         return None
 
+    def removal_preview(self, pkg: Package) -> list[str]:
+        """Otros paquetes que se desinstalarían por arrastre (vacío si ninguno)."""
+        return []
+
     def needs_root(self, pkg: Package) -> bool:
         return False
 

@@ -15,7 +15,36 @@ from .base import Backend
 
 HOME = Path.home()
 MAX_DEPTH = 3
-SKIP_DIRS = {".cache", ".git", "node_modules", ".venv", "__pycache__", "snap", ".local/share"}
+SKIP_DIRS = {".cache", ".git", "node_modules", ".venv", "__pycache__", "snap"}
+
+# Un enlace que apunta aquí ya lo inventaría otro backend: no es un binario suelto.
+MANAGED_ROOTS = tuple(
+    str(p)
+    for p in (
+        HOME / ".local" / "share" / "pipx",
+        HOME / ".local" / "pipx",
+        HOME / ".cargo",
+        HOME / ".nvm",
+        HOME / ".volta",
+        HOME / "go",
+        HOME / ".local" / "lib" / "node_modules",
+        Path("/usr/lib"),
+        Path("/usr/bin"),
+        Path("/usr/share"),
+        Path("/snap"),
+        Path("/var/lib/snapd"),
+        Path("/var/lib/flatpak"),
+        Path("/home/linuxbrew"),
+    )
+)
+
+
+def is_managed_elsewhere(path: Path) -> bool:
+    """¿Es un enlace a algo que ya gestiona pipx, cargo, npm, apt, snap...?"""
+    if not path.is_symlink():
+        return False
+    target = str(path.resolve())
+    return any(target == root or target.startswith(root + os.sep) for root in MANAGED_ROOTS)
 
 
 def _iter_files(root: Path, depth: int) -> list[Path]:
@@ -110,6 +139,8 @@ class ManualBackend(Backend):
                 if real in seen:
                     continue
                 if path.name.lower().endswith(".appimage"):
+                    continue
+                if is_managed_elsewhere(path):
                     continue
                 if not path.is_file() and not path.is_symlink():
                     continue

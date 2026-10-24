@@ -19,7 +19,7 @@ from ..core.models import (  # noqa: E402
     human_size,
 )
 from ..core.registry import ScanResult, get_backend, scan_async  # noqa: E402
-from ..core.runner import display_command, run_streaming, with_root  # noqa: E402
+from ..core.runner import PrivilegeError, display_command, run_streaming, with_root  # noqa: E402
 from .dialogs import DetailDialog, ProgressDialog  # noqa: E402
 from .rows import HistoryRow, OrphanRow, PackageItem, PackageRow  # noqa: E402
 
@@ -457,12 +457,31 @@ class MainWindow(Adw.ApplicationWindow):
         backend = get_backend(package.source)
         if backend is None or package.protected:
             return
-        argv = backend.removal_argv(package, purge=False)
-        if not argv:
+        if not backend.removal_argv(package, purge=False):
             self._toast(f"«{package.name}» no se puede desinstalar desde Purgatio.")
             return
+
+        def worker() -> None:
+            try:
+                collateral = backend.removal_preview(package)
+            except Exception:  # noqa: BLE001 - sin vista previa se avisa, no se bloquea
+                collateral = None
+            GLib.idle_add(self._present_remove_dialog, package, collateral)
+
+        threading.Thread(target=worker, name="purgatio-preview", daemon=True).start()
+
+    def _present_remove_dialog(self, package: Package, collateral: list[str] | None) -> bool:
+        backend = get_backend(package.source)
+        argv = backend.removal_argv(package, purge=False) if backend else None
+        if backend is None or not argv:
+            return False
         needs_root = backend.needs_root(package)
         body = f"{package.source_info.label} · {human_size(package.size_bytes)}\n\n{display_command(argv, needs_root)}"
+        if collateral:
+            shown = ", ".join(collateral[:12]) + ("…" if len(collateral) > 12 else "")
+            body += f"\n\n⚠ También se desinstalarán {len(collateral)} paquete(s) que dependen de este:\n{shown}"
+        elif collateral is None:
+            body += "\n\nNo se pudo calcular qué más se desinstalaría."
         dialog = Adw.AlertDialog(heading=f"¿Desinstalar «{package.name}»?", body=body)
         dialog.set_body_use_markup(False)
         dialog.add_response("cancel", "Cancelar")
@@ -487,6 +506,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         dialog.connect("response", on_response)
         dialog.present(self)
+        return False
 
     def _run_command(
         self,
@@ -499,13 +519,18 @@ class MainWindow(Adw.ApplicationWindow):
         cancel = threading.Event()
         progress = ProgressDialog(title, display_command(argv, needs_root), self)
         progress.cancel_event = cancel
+        # Con root no se puede cancelar sin dejar el gestor a medias.
+        progress.cancel_button.set_visible(not needs_root)
 
         def worker() -> None:
-            code = run_streaming(
-                with_root(argv) if needs_root else argv,
-                lambda line: GLib.idle_add(progress.append, line),
-                cancel=cancel,
-            )
+            def log(line: str) -> None:
+                GLib.idle_add(progress.append, line)
+
+            try:
+                code = run_streaming(with_root(argv) if needs_root else argv, log, cancel=cancel)
+            except PrivilegeError as exc:
+                log(str(exc))
+                code = 126
             GLib.idle_add(self._after_command, progress, code, package, orphan)
 
         threading.Thread(target=worker, name="purgatio-remove", daemon=True).start()

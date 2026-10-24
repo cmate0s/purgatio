@@ -10,7 +10,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from purgatio.core.backends.apt_backend import AptBackend  # noqa: E402
+from purgatio.core.backends.apt_backend import AptBackend, parse_simulation  # noqa: E402
+from purgatio.core.backends.brew_backend import parse_brew_versions  # noqa: E402
+from purgatio.core.backends.npm_backend import NpmBackend, parse_cargo_list  # noqa: E402
+from purgatio.core.backends.snap_backend import PROTECTED_RE, parse_snap_table  # noqa: E402
+from purgatio.core.backends.manual_backend import is_managed_elsewhere  # noqa: E402
 from purgatio.core.backends.flatpak_backend import parse_size  # noqa: E402
 from purgatio.core.history import parse_history  # noqa: E402
 from purgatio.core.inventory import render_markdown  # noqa: E402
@@ -87,7 +91,75 @@ def test_inventory() -> None:
     check("**libc6**" in full, "modo completo incluye dependencias")
 
 
+def test_apt_simulation() -> None:
+    sample = """Reading package lists...
+The following packages will be REMOVED:
+  foo ubuntu-desktop
+Remv foo [1.0]
+Remv ubuntu-desktop:amd64 [1.1]
+Remv libfoo1 [1.0]
+"""
+    check(parse_simulation(sample, "foo") == ["ubuntu-desktop", "libfoo1"], "arrastre sin el objetivo ni la arquitectura")
+    check(parse_simulation("Remv foo [1.0]", "foo") == [], "sin arrastre")
+
+
+def test_cargo_parse() -> None:
+    sample = """ripgrep v14.1.0:
+    rg
+foo v0.1.0 (https://github.com/x/y#abc123):
+    foo-cli
+    foo-daemon
+bar v0.2.0 (/home/u/src/bar):
+    bar
+"""
+    crates = parse_cargo_list(sample)
+    check([c["name"] for c in crates] == ["ripgrep", "foo", "bar"], "incluye crates de git y de ruta local")
+    check(crates[0]["bins"] == ["rg"], "binario distinto del nombre del crate")
+    check(crates[1]["origin"] == "https://github.com/x/y#abc123", "origen de git")
+    check(crates[1]["bins"] == ["foo-cli", "foo-daemon"], "varios binarios")
+
+
+def test_snap_parse_and_protection() -> None:
+    sample = """Name               Version     Rev    Tracking       Publisher   Notes
+core22             20240111    1380   latest/stable  canonical✓  base
+gnome-42-2204      0+git.ff35a853  176  latest/stable  canonical✓  -
+gnome-text-editor  46.0        200    latest/stable  canonical✓  -
+firefox            130.0       4650   latest/stable  mozilla✓    -
+"""
+    rows = parse_snap_table(sample)
+    check([r[0] for r in rows] == ["core22", "gnome-42-2204", "gnome-text-editor", "firefox"], "cuatro filas")
+    check(PROTECTED_RE.match("core22") and PROTECTED_RE.match("gnome-42-2204"), "bases protegidas")
+    check(not PROTECTED_RE.match("gnome-text-editor"), "una app de GNOME no es un runtime")
+    check(not PROTECTED_RE.match("core-keeper"), "prefijo core- no basta")
+
+
+def test_npm_guardrails() -> None:
+    backend = NpmBackend()
+    check(backend.removal_argv(Package(source="npm", id="npm", name="npm", protected=True)) is None, "npm no se quita a sí mismo")
+    argv = backend.removal_argv(Package(source="npm", id="typescript", name="typescript"))
+    check(argv == ["npm", "uninstall", "-g", "typescript"], "comando de npm")
+
+
+def test_brew_parse() -> None:
+    check(parse_brew_versions("git 2.45.0\nopenssl@3 3.3.0 3.2.1\n") == {"git": "2.45.0", "openssl@3": "3.2.1"}, "última versión")
+
+
+def test_managed_symlinks(tmp: Path | None = None) -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as raw:
+        link = Path(raw) / "tool"
+        link.symlink_to("/usr/bin/env")
+        check(is_managed_elsewhere(link), "enlace a /usr/bin lo gestiona apt")
+        plain = Path(raw) / "script"
+        plain.write_text("#!/bin/sh\n")
+        check(not is_managed_elsewhere(plain), "un fichero normal es un binario suelto")
+
+
 def test_scan() -> None:
+    if not AptBackend().available():
+        print("  --  test_scan omitido: python-apt no está disponible")
+        return
     result = scan_sync(include_orphans=False)
     check(len(result.packages) > 10, "el escaneo real devuelve paquetes")
     check(any(p.source == "apt" for p in result.packages), "APT presente en este equipo")
@@ -100,6 +172,12 @@ if __name__ == "__main__":
         test_history,
         test_matching,
         test_apt_guardrails,
+        test_apt_simulation,
+        test_cargo_parse,
+        test_snap_parse_and_protection,
+        test_npm_guardrails,
+        test_brew_parse,
+        test_managed_symlinks,
         test_inventory,
         test_scan,
     ):

@@ -70,11 +70,25 @@ SOURCES: tuple[Source, ...] = (
         5,
     ),
     Source(
+        "go",
+        "Go",
+        "utilities-terminal-symbolic",
+        "Binarios de Go instalados con «go install».",
+        6,
+    ),
+    Source(
+        "brew",
+        "Homebrew",
+        "utilities-terminal-symbolic",
+        "Fórmulas instaladas con Homebrew (Linuxbrew).",
+        7,
+    ),
+    Source(
         "manual",
         "AppImages y binarios",
         "folder-download-symbolic",
         "AppImages, binarios sueltos y lanzadores que ningún gestor conoce.",
-        6,
+        8,
     ),
 )
 

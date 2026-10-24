@@ -3,10 +3,21 @@
 from __future__ import annotations
 
 from ..models import Orphan, Package, SOURCE_MAP
-from ..runner import which
+from ..runner import run_capture, which
 from .base import Backend
 
 APT_GET = which("apt-get") or "/usr/bin/apt-get"
+
+
+def parse_simulation(output: str, target: str) -> list[str]:
+    """Paquetes distintos de ``target`` que ``apt-get -s remove`` eliminaría."""
+    names: list[str] = []
+    for line in output.splitlines():
+        if line.startswith("Remv "):
+            name = line.split()[1].split(":")[0]
+            if name != target:
+                names.append(name)
+    return names
 
 
 class AptBackend(Backend):
@@ -74,6 +85,12 @@ class AptBackend(Backend):
             argv.append("--purge")
         argv.append(pkg.id)
         return argv
+
+    def removal_preview(self, pkg: Package) -> list[str]:
+        proc = run_capture([APT_GET, "-s", "remove", pkg.id], timeout=60)
+        if proc.returncode != 0:
+            raise RuntimeError(proc.stderr.strip() or "apt-get -s falló")
+        return parse_simulation(proc.stdout, pkg.id)
 
     def needs_root(self, pkg: Package) -> bool:
         return True
