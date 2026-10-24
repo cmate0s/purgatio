@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Build / empaquetado
+dist/
+build/
+*.egg-info/
+debian/.debhelper/
+debian/purgatio/
+*.deb
+
+# Capturas de desarrollo
+tmp/
+*.png
+!data/*.png
+
+# Editor
+.idea/
+.vscode/
+*.swp

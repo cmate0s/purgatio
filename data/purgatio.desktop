@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Purgatio
+GenericName=Desinstalador de software
+GenericName[en]=Software uninstaller
+Comment=Inventario visual y desinstalación unificada de APT, Snap, Flatpak, pipx, npm, cargo y AppImages
+Comment[en]=Visual inventory and unified uninstaller for APT, Snap, Flatpak, pipx, npm, cargo and AppImages
+Exec=purgatio
+Icon=purgatio
+Terminal=false
+Categories=System;PackageManager;
+Keywords=uninstall;desinstalar;paquetes;apt;snap;flatpak;appimage;limpiar;inventario;
+StartupNotify=true

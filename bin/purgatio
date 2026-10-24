@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Lanzador de Purgatio sin instalar (ejecuta desde el repositorio)."""
+
+import os
+import sys
+
+# realpath resuelve el enlace simbólico de ~/.local/bin/purgatio
+ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, ROOT)
+
+from purgatio.__main__ import main  # noqa: E402
+
+raise SystemExit(main())
