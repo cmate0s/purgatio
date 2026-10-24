@@ -4,7 +4,7 @@
 
 Purgatio responde a dos preguntas que en Linux obligan a media docena de comandos:
 «¿qué tengo instalado?» y «¿cómo se quita esto?». Reúne en una sola ventana lo que
-instalaste con APT, Snap, Flatpak, pipx, npm, Cargo, además de AppImages y binarios
+instalaste con APT, Snap, Flatpak, pipx, npm, Cargo, Go, Homebrew, pip --user, conda, además de AppImages y binarios
 sueltos que ningún gestor conoce. No hay lista que mantener a mano: se lee el estado
 real del sistema en cada arranque.
 
@@ -15,8 +15,8 @@ real del sistema en cada arranque.
 - **Un listado único** con buscador, filtro por origen y «solo manuales» activado por
   defecto (las 2.400 librerías de APT no te tapan las 76 apps que instalaste tú).
 - **Tamaño real** de cada cosa, para saber qué ocupa de verdad.
-- **Desinstalar con confirmación**: muestra el comando exacto antes de ejecutarlo y
-  pide la contraseña con el diálogo nativo del sistema (polkit/pkexec).
+- **Desinstalar con confirmación**: muestra el comando exacto y, en APT, qué otros
+  paquetes se llevaría por delante (simulación), antes de ejecutarlo; pide la contraseña con el diálogo nativo del sistema (polkit/pkexec).
 - **Limpieza de restos**: paquetes huérfanos de APT, revisiones antiguas de Snap y
   runtimes de Flatpak que ya no usa nada.
 - **Historial**: lee `/var/log/apt/history.log` y te dice qué se instaló, cuándo y con
@@ -72,6 +72,10 @@ purgatio/
 │       ├── flatpak_backend.py
 │       ├── pipx_backend.py
 │       ├── npm_backend.py      # npm + cargo
+│       ├── go_backend.py       # go install
+│       ├── brew_backend.py     # Homebrew
+│       ├── pip_backend.py      # pip --user
+│       ├── conda_backend.py    # entornos conda
 │       └── manual_backend.py   # AppImages, ~/.local/bin, restos .old
 └── ui/                  # GTK4 + Libadwaita
 ```

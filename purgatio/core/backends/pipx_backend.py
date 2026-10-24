@@ -11,18 +11,14 @@ from ..runner import run_capture, which
 from .base import Backend
 
 
-def _dir_size(path: Path, limit: int = 4000) -> int:
+def _dir_size(path: Path) -> int:
     total = 0
-    seen = 0
-    for root, dirs, files in os.walk(path):
+    for root, _dirs, files in os.walk(path):
         for name in files:
             try:
-                total += (Path(root) / name).stat().st_size
+                total += (Path(root) / name).lstat().st_size
             except OSError:
                 pass
-            seen += 1
-            if seen > limit:
-                return total
     return total
 
 

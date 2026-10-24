@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from ..models import Orphan, Package, SOURCE_MAP
 from ..runner import run_capture, which
 from .base import Backend
@@ -22,6 +24,35 @@ def parse_size(text: str) -> int:
         return 0
     unit = parts[1] if len(parts) > 1 else "B"
     return int(value * UNITS.get(unit, 1))
+
+
+UNUSED_ROW = re.compile(r"^\s*\d+\.\s+(?P<ref>\S+)\s+(?P<branch>\S+)\s+[a-z]\b")
+
+
+def parse_unused(output: str) -> list[str] | None:
+    """Refs que ``flatpak uninstall --unused --assumeno`` propone quitar.
+
+    Devuelve ``[]`` si no hay nada y ``None`` si la salida no se entiende
+    (en ese caso es más seguro seguir ofreciendo la limpieza).
+    """
+    refs = [f"{m['ref']}//{m['branch']}" for line in output.splitlines() if (m := UNUSED_ROW.match(line))]
+    if refs:
+        return refs
+    lowered = output.lower()
+    if "nothing unused" in lowered or "nothing to do" in lowered:
+        return []
+    return None
+
+
+def disambiguate(packages: list[Package]) -> None:
+    """Si una app está en las instalaciones ``user`` y ``system``, da ids únicos."""
+    counts: dict[str, int] = {}
+    for pkg in packages:
+        counts[pkg.id] = counts.get(pkg.id, 0) + 1
+    for pkg in packages:
+        pkg.extra.setdefault("app_id", pkg.id)
+        if counts[pkg.id] > 1:
+            pkg.id = f"{pkg.id}@{pkg.extra.get('installation', '')}"
 
 
 class FlatpakBackend(Backend):
@@ -62,6 +93,7 @@ class FlatpakBackend(Backend):
                     extra={"installation": installation, "origin": origin},
                 )
             )
+        disambiguate(packages)
         return packages
 
     def removal_argv(self, pkg: Package, purge: bool = False) -> list[str] | None:
@@ -73,7 +105,7 @@ class FlatpakBackend(Backend):
             argv.append(f"--{installation}")
         if purge:
             argv.append("--delete-data")
-        argv.append(pkg.id)
+        argv.append(str(pkg.extra.get("app_id", pkg.id)))
         return argv
 
     def needs_root(self, pkg: Package) -> bool:
@@ -92,12 +124,24 @@ class FlatpakBackend(Backend):
         installations = {row.split("\t")[2] for row in proc.stdout.splitlines() if len(row.split("\t")) >= 3}
         items: list[Orphan] = []
         for installation in sorted(installations):
+            # --assumeno: Flatpak enseña qué quitaría y responde «no» por nosotros.
+            preview = run_capture(
+                [FLATPAK, "uninstall", "--unused", "--assumeno", f"--{installation}"], timeout=60
+            )
+            unused = parse_unused(preview.stdout + preview.stderr)
+            if unused == []:
+                continue
+            subtitle = (
+                f"{len(unused)} runtime(s) o extensión(es) que ninguna app necesita"
+                if unused
+                else "Flatpak calcula qué runtimes y extensiones ya no necesita ninguna app"
+            )
             items.append(
                 Orphan(
                     source="flatpak",
                     id=f"flatpak-unused-{installation}",
                     title=f"Runtimes no utilizados ({installation})",
-                    subtitle="Flatpak calcula qué runtimes y extensiones ya no necesita ninguna app",
+                    subtitle=subtitle,
                     argv=[FLATPAK, "uninstall", "-y", f"--{installation}", "--unused"],
                     needs_root=installation == "system",
                 )

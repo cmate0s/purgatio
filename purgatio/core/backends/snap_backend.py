@@ -12,26 +12,21 @@ from .base import Backend
 SNAP = which("snap") or "/usr/bin/snap"
 SNAPS_DIR = Path("/var/lib/snapd/snaps")
 
-# Componentes que sostienen el propio sistema de snaps: no se ofrecen para quitar.
-PROTECTED_NAMES = {"snapd", "bare", "core", "core20", "core22", "core24", "core26"}
-PROTECTED_PREFIXES = (
-    "core",
-    "gnome-",
-    "gtk-common-themes",
-    "mesa-",
-    "kf5-",
-    "kf6-",
-    "snapd",
+# Componentes que sostienen el propio sistema de snaps (bases, runtimes y
+# plataformas de temas): no se ofrecen para quitar. Se compara por patrón exacto
+# para no ocultar apps reales como «gnome-text-editor».
+PROTECTED_RE = re.compile(
+    r"^(snapd|bare|core\d*|gtk-common-themes"
+    r"|gnome-\d+-\d+(-\d+)?(-sdk)?"
+    r"|mesa-[\w.-]+|kf[56]-[\w.-]+|kde-frameworks-[\w.-]+)$"
 )
 COLUMNS = re.compile(r"\s{2,}")
 
 
-def _snap_rows(extra: list[str] | None = None) -> list[list[str]]:
-    proc = run_capture([SNAP, "list", *(extra or [])], timeout=45)
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or "snap list falló")
+def parse_snap_table(text: str) -> list[list[str]]:
+    """Filas (nombre, versión, rev, canal, editor, notas) de ``snap list``."""
     rows: list[list[str]] = []
-    for line in proc.stdout.splitlines()[1:]:
+    for line in text.splitlines()[1:]:
         if not line.strip():
             continue
         fields = COLUMNS.split(line.strip())
@@ -40,6 +35,13 @@ def _snap_rows(extra: list[str] | None = None) -> list[list[str]]:
         if len(fields) >= 6:
             rows.append(fields[:6])
     return rows
+
+
+def _snap_rows(extra: list[str] | None = None) -> list[list[str]]:
+    proc = run_capture([SNAP, "list", *(extra or [])], timeout=45)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "snap list falló")
+    return parse_snap_table(proc.stdout)
 
 
 def _revision_size(name: str, rev: str) -> int:
@@ -59,7 +61,7 @@ class SnapBackend(Backend):
     def list_packages(self) -> list[Package]:
         packages: list[Package] = []
         for name, version, rev, tracking, publisher, notes in _snap_rows():
-            is_base = "base" in notes.split() or name in PROTECTED_NAMES or name.startswith(PROTECTED_PREFIXES)
+            is_base = "base" in notes.split() or bool(PROTECTED_RE.match(name))
             packages.append(
                 Package(
                     source="snap",

@@ -20,8 +20,8 @@ from . import __version__
 from .core import inventory
 from .core.history import load_history
 from .core.models import SOURCE_MAP, Package, human_size
-from .core.registry import BACKENDS, get_backend, scan_sync
-from .core.runner import display_command, run_streaming, with_root
+from .core.registry import BACKENDS, get_backend, safe_list, scan_sync
+from .core.runner import PrivilegeError, display_command, run_streaming, with_root
 
 COMMANDS = {"list", "export", "history", "orphans", "remove", "info"}
 
@@ -79,9 +79,15 @@ def _find(target: str) -> Package | None:
     if not package_id:
         print("Formato esperado: source:id (por ejemplo apt:htop)", file=sys.stderr)
         return None
-    result = scan_sync(include_orphans=False)
-    for pkg in result.packages:
-        if pkg.source == source_id and pkg.id == package_id:
+    backend = get_backend(source_id)
+    if backend is None:
+        print(f"Origen desconocido: {source_id}", file=sys.stderr)
+        return None
+    packages, error = safe_list(backend)
+    if error:
+        print(f"aviso: {backend.source.label}: {error}", file=sys.stderr)
+    for pkg in packages:
+        if pkg.id == package_id:
             return pkg
     return None
 
@@ -181,15 +187,30 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         needs_root = backend.needs_root(pkg)
         print(f"Comando: {display_command(argv, needs_root)}")
+        try:
+            collateral = backend.removal_preview(pkg)
+        except Exception as exc:  # noqa: BLE001
+            collateral = None
+            print(f"aviso: no se pudo calcular qué más se desinstalaría ({exc})", file=sys.stderr)
+        if collateral:
+            print(f"Atención: también se desinstalarían {len(collateral)} paquete(s): {', '.join(collateral)}")
         if args.dry_run:
             print("(simulación: no se ha ejecutado nada)")
             return 0
         if not args.yes:
-            answer = input("¿Desinstalar? [s/N] ").strip().casefold()
+            try:
+                answer = input("¿Desinstalar? [s/N] ").strip().casefold()
+            except EOFError:
+                print("\nSin terminal interactiva: usa --yes para confirmar.", file=sys.stderr)
+                return 1
             if answer not in ("s", "si", "sí", "y", "yes"):
                 print("Cancelado.")
                 return 1
-        code = run_streaming(with_root(argv) if needs_root else argv, print)
+        try:
+            code = run_streaming(with_root(argv) if needs_root else argv, print)
+        except PrivilegeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 126
         if code == 0:
             print("Hecho.")
         else:
